@@ -95,7 +95,21 @@ app_ui = ui.page_sidebar(
             max=0.9,
             value=0.55,
             step=0.05
-        )
+        ),
+
+        ui.hr(),
+
+        ui.h4("Energy Consumption Calculation"),
+
+        ui.input_numeric(
+            "distance",
+            "Distance (km)",
+            value=10,
+            min=0.1,
+            max=100,
+            step=0.1
+        ),
+
     ),
 
     ui.h2("Treadmill Running Efficiency Calculator"),
@@ -128,6 +142,11 @@ app_ui = ui.page_sidebar(
         ),
 
         col_widths=[6, 6]
+    ),
+
+    ui.card(
+        ui.card_header("Total Energy Consumption"),
+        ui.output_text_verbatim("total_energy_output")
     ),
 
     ui.card(
@@ -333,6 +352,45 @@ def server(input, output, session):
             "note": note
         }
 
+    @reactive.calc
+    def total_energy_consumption():
+
+        metab = metabolic_power()
+        distance = input.distance()
+        velocity = input.velocity()
+        mass = input.mass()
+        vo2 = input.vo2()
+
+        # Calculate time to cover distance (in seconds)
+        distance_m = distance * 1000
+        time_seconds = distance_m / velocity
+
+        # Total VO2 consumption in ml
+        # vo2 is in ml/kg/min, mass in kg
+        vo2_per_min = (vo2 * mass)
+        time_minutes = time_seconds / 60
+        total_vo2_ml = vo2_per_min * time_minutes
+
+        # Total kcal consumption
+        total_kcal = metab["kcal_min"] * time_minutes
+
+        # Total Joules
+        # 1 kcal = 4184 Joules
+        total_joules = total_kcal * 4184
+
+        # Total energy in watts·hours
+        total_wh = (metab["watts"] * time_seconds) / 3600
+
+        return {
+            "distance": distance,
+            "time_minutes": time_minutes,
+            "time_hours": time_minutes / 60,
+            "total_vo2_ml": total_vo2_ml,
+            "total_kcal": total_kcal,
+            "total_joules": total_joules,
+            "total_wh": total_wh
+        }
+
 
     @output
     @render.text
@@ -422,6 +480,32 @@ def server(input, output, session):
 
             f"Hourly Energy Cost:\n"
             f"{metab['kcal_min'] * 60:.1f} kcal/h"
+        )
+
+    @output
+    @render.text
+    def total_energy_output():
+
+        total = total_energy_consumption()
+
+        return (
+            f"Distance: {total['distance']:.1f} km\n"
+            f"Estimated Time: {total['time_hours']:.2f} hours "
+            f"({int(total['time_minutes'])} minutes)\n\n"
+
+            f"----------------------------------\n"
+
+            f"TOTAL VO₂ CONSUMPTION:\n"
+            f"{total['total_vo2_ml']:,.0f} ml\n\n"
+
+            f"TOTAL ENERGY EXPENDITURE:\n"
+            f"{total['total_kcal']:,.1f} kcal\n\n"
+
+            f"TOTAL ENERGY (JOULES):\n"
+            f"{total['total_joules']:,.0f} J\n\n"
+
+            f"TOTAL ENERGY (WATT·HOURS):\n"
+            f"{total['total_wh']:,.1f} Wh"
         )
 
 
